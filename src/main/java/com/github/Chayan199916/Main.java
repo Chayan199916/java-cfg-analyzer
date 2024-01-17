@@ -25,6 +25,10 @@ import java.util.Optional;
 import java.util.Set;
 
 public class Main {
+    static int boundedRegions = 0;
+    static int numberOfNodes = 0;
+    static int numberOfEdges = 0;
+
     public static void main(String[] args) throws Exception {
         // Specify the file name in the resources folder
         String fileName = "Sample2.java";
@@ -48,13 +52,29 @@ public class Main {
 
         // Create CFG nodes and edges
         if (ifStmt != null) {
+            boundedRegions++;
             Map<String, List<String>> adjacencyList = createCFG(ifStmt);
+
+            // # of Bounded regions = # of predicates in the CFG
+            System.out.println("Number of bounded regions: " + boundedRegions);
+            System.out.println("Number of predicates: " + boundedRegions);
+            System.out.println("Number of nodes: " + numberOfNodes);
+            System.out.println("Number of edges: " + numberOfEdges);
+            int cyclomaticComplexity = boundedRegions + 1;
+            System.out.println("Cyclomatic complexity: " + cyclomaticComplexity);
+            System.out.println("So we need at most " + cyclomaticComplexity + " independant paths to cover the CFG");
+
+            List<List<String>> independentPaths = findMaximalIndependentPaths(adjacencyList, "if", "end");
+            System.out.println("Maximal Independent Paths:");
+            for (List<String> path : independentPaths) {
+                System.out.println(path);
+            }
             // Entry point
-            String entryPoint = "if";
+            // String entryPoint = "if";
 
             // Calculate the number of distinct paths
-            int distinctPaths = calculateDistinctPaths(adjacencyList, entryPoint);
-            System.out.println("Number of distinct paths: " + distinctPaths);
+            // int distinctPaths = calculateDistinctPaths(adjacencyList, entryPoint);
+            // System.out.println("Number of distinct paths: " + distinctPaths);
 
             // Create the output directory if it doesn't exist
             Path outputPath = Paths.get(targetDirectory);
@@ -90,12 +110,14 @@ public class Main {
         // Create nodes for the if statement and its branches
         addNode(adjacencyList, "if");
         addNode(adjacencyList, "then");
-        addNode(adjacencyList, "else");
         addNode(adjacencyList, "end");
 
         // Connect edges based on control flow
         adjacencyList.get("if").add("then");
-        adjacencyList.get("if").add("else");
+        numberOfEdges++;
+        adjacencyList.get("if").add("end"); // if else part not there
+        numberOfEdges++;
+
         // adjacencyList.get("then").add("end");
         // adjacencyList.get("else").add("end");
 
@@ -107,6 +129,7 @@ public class Main {
             addNodesAndEdges(adjacencyList, thenBlockStmt.getStatements());
             for (Statement stmt : thenBlockStmt.getStatements()) {
                 adjacencyList.get("then").add(stmt.toString());
+                numberOfEdges++;
             }
         } else if (thenStmt instanceof ExpressionStmt) {
             ExpressionStmt expressionStmt = (ExpressionStmt) thenStmt;
@@ -115,9 +138,16 @@ public class Main {
             addNode(adjacencyList, expression.toString());
             // Connect it to the subsequent node (usually "end")
             adjacencyList.get(expression.toString()).add("end");
+            numberOfEdges++;
         }
         Optional<Statement> optionalElseStmt = ifStmt.getElseStmt();
         optionalElseStmt.ifPresent(statement -> {
+            addNode(adjacencyList, "else");
+            // if else part is present, then no edge between "if" and "end"
+            adjacencyList.get("if").remove(adjacencyList.get("if").size() - 1);
+            numberOfEdges--;
+            adjacencyList.get("if").add("else");
+            numberOfEdges++;
             // Do something with the Statement if it's present
             Statement elseStmt = optionalElseStmt.get(); // Unwrap the Optional
             if (elseStmt instanceof BlockStmt) {
@@ -126,6 +156,7 @@ public class Main {
                 addNodesAndEdges(adjacencyList, elseBlockStmt.getStatements());
                 for (Statement stmt : elseBlockStmt.getStatements()) {
                     adjacencyList.get("else").add(stmt.toString());
+                    numberOfEdges++;
                 }
             } else if (elseStmt instanceof ExpressionStmt) {
                 ExpressionStmt expressionStmt = (ExpressionStmt) elseStmt;
@@ -134,6 +165,7 @@ public class Main {
                 addNode(adjacencyList, expression.toString());
                 // Connect it to the "end" node
                 adjacencyList.get(expression.toString()).add("end");
+                numberOfEdges++;
             }
         });
         return adjacencyList;
@@ -145,39 +177,43 @@ public class Main {
             // Connect the last statement to the "end" node
             if (stmt == statements.get(statements.size() - 1)) {
                 adjacencyList.get(stmt.toString()).add("end");
+                numberOfEdges++;
             }
         }
     }
 
     private static void addNode(Map<String, List<String>> adjacencyList, String nodeId) {
         if (!adjacencyList.containsKey(nodeId)) {
+            numberOfNodes++;
             adjacencyList.put(nodeId, new ArrayList<>());
         }
     }
 
-    private static int calculateDistinctPaths(Map<String, List<String>> adjacencyList, String node) {
+    private static List<List<String>> findMaximalIndependentPaths(Map<String, List<String>> adjacencyList,
+            String startNode, String endNode) {
+        List<List<String>> independentPaths = new ArrayList<>();
         Set<String> visitedNodes = new HashSet<>();
-        return dfs(adjacencyList, node, visitedNodes);
+        List<String> currentPath = new ArrayList<>();
+        dfs(adjacencyList, startNode, endNode, visitedNodes, currentPath, independentPaths);
+        return independentPaths;
     }
 
-    private static int dfs(Map<String, List<String>> adjacencyList, String currentNode, Set<String> visitedNodes) {
+    private static void dfs(Map<String, List<String>> adjacencyList, String currentNode, String endNode,
+            Set<String> visitedNodes, List<String> currentPath,
+            List<List<String>> independentPaths) {
         visitedNodes.add(currentNode);
+        currentPath.add(currentNode);
 
-        // If the current node has no outgoing edges, it's an endpoint
-        if (adjacencyList.get(currentNode).isEmpty()) {
-            visitedNodes.remove(currentNode); // Backtrack
-            return 1; // This is a distinct path
-        }
-
-        int distinctPaths = 0;
-        for (String nextNode : adjacencyList.get(currentNode)) {
-            if (!visitedNodes.contains(nextNode)) {
-                distinctPaths += dfs(adjacencyList, nextNode, visitedNodes);
+        if (currentNode.equals(endNode)) {
+            independentPaths.add(new ArrayList<>(currentPath));
+        } else {
+            for (String nextNode : adjacencyList.get(currentNode)) {
+                if (!visitedNodes.contains(nextNode)) {
+                    dfs(adjacencyList, nextNode, endNode, visitedNodes, currentPath, independentPaths);
+                }
             }
         }
-
-        visitedNodes.remove(currentNode); // Backtrack
-        return distinctPaths;
+        visitedNodes.remove(currentNode);
+        currentPath.remove(currentPath.size() - 1);
     }
-
 }
