@@ -100,7 +100,7 @@ public class Main {
         System.out.println("Cyclomatic complexity: " + cyclomaticComplexity);
         System.out.println("So we need at most " + cyclomaticComplexity + " independent paths to cover the CFG");
 
-        List<List<String>> independentPaths = findMaximalIndependentPaths(adjacencyList, start, end);
+        List<List<String>> independentPaths = findAllIndependentPaths(adjacencyList, start, end);
         System.out.println("Maximal Independent Paths:");
         for (List<String> path : independentPaths) {
             System.out.println(path);
@@ -251,31 +251,29 @@ public class Main {
         }
     }
 
-    private static List<List<String>> findMaximalIndependentPaths(Map<String, List<String>> adjacencyList,
-            String startNode, String endNode) {
-        List<List<String>> independentPaths = new ArrayList<>();
-        Set<String> visitedNodes = new HashSet<>();
-        List<String> currentPath = new ArrayList<>();
-        dfs(adjacencyList, startNode, endNode, visitedNodes, currentPath, independentPaths);
-        return independentPaths;
+    private static List<List<String>> findAllIndependentPaths(Map<String, List<String>> graph, String start,
+            String end) {
+        Set<String> visited = new HashSet<>();
+        List<List<String>> paths = new ArrayList<>();
+        findPaths(graph, start, end, visited, new ArrayList<>(), paths);
+        return paths;
     }
 
-    private static void dfs(Map<String, List<String>> adjacencyList, String currentNode, String endNode,
-            Set<String> visitedNodes, List<String> currentPath,
-            List<List<String>> independentPaths) {
-        visitedNodes.add(currentNode);
-        currentPath.add(currentNode);
+    private static void findPaths(Map<String, List<String>> graph, String start, String end, Set<String> visited,
+            List<String> path, List<List<String>> paths) {
+        visited.add(start);
+        path.add(start);
 
-        if (currentNode.equals(endNode)) {
-            independentPaths.add(new ArrayList<>(currentPath));
+        if (start.equals(end)) {
+            paths.add(new ArrayList<>(path));
         } else {
-            for (String nextNode : adjacencyList.get(currentNode)) {
-                if (!visitedNodes.contains(nextNode)) {
-                    dfs(adjacencyList, nextNode, endNode, visitedNodes, currentPath, independentPaths);
+            for (String neighbor : graph.getOrDefault(start, new ArrayList<>())) {
+                if (!visited.contains(neighbor) || neighbor.equals("while")) {
+                    findPaths(graph, neighbor, end, new HashSet<>(visited), new ArrayList<>(path), paths);
                 }
             }
         }
-        visitedNodes.remove(currentNode);
-        currentPath.remove(currentPath.size() - 1);
+
+        visited.remove(start);
     }
 }
